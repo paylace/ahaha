@@ -2,8 +2,8 @@
 import random
 import collections
 from settings import SimulationSettings
-import numpy as np # NumPy import 추가
-from utils import calculate_similarity_jit # 새로 만든 JIT 함수 import
+import numpy as np
+from utils import calculate_similarity_jit
 
 class Individual:
     _next_id = 0
@@ -15,41 +15,7 @@ class Individual:
         self.env.add_individual_to_occupancy_map(self)
         self._initialize_traits(); self.genotype = self._generate_genotype_from_phenotype()
         self._initialize_base_stats()
-      
-    def _calculate_genetic_similarity(self, other):
-        """
-        두 개체의 유전자형을 비교하여 유전적 유사성 점수(0.0~1.0)를 계산합니다.
-        핵심 계산은 Numba로 컴파일된 외부 함수를 호출하여 속도를 높입니다.
-        """
-        total_sim, total_weight = 0.0, 0.0
-        for trait, weight in SimulationSettings.GENETIC_SIMILARITY_WEIGHTS.items():
-            if not hasattr(self, trait) or not hasattr(other, trait) or self.genotype.get(trait) is None: continue
-            
-            total_weight += weight
-            gene1, gene2 = self.genotype.get(trait), other.genotype.get(trait)
-            trait_sim = 0.0
-            
-            if isinstance(gene1, (list, tuple)):
-                alleles1_list = (gene1[0] + gene1[1]) if isinstance(gene1[0], list) else gene1
-                alleles2_list = (gene2[0] + gene2[1]) if isinstance(gene2[0], list) else gene2
-                
-                # JIT 함수에 전달하기 위해 NumPy 배열로 변환
-                # 빈 문자열 ''이 들어올 경우를 대비해 if c를 추가하여 안정성 확보
-                alleles1_np = np.array([ord(c[0]) for c in alleles1_list if c], dtype=np.int64)
-                alleles2_np = np.array([ord(c[0]) for c in alleles2_list if c], dtype=np.int64)
-                
-                # 두 배열이 모두 비어있지 않을 때만 JIT 함수를 호출
-                if alleles1_np.size > 0 and alleles2_np.size > 0:
-                    trait_sim = calculate_similarity_jit(alleles1_np, alleles2_np)
-                # (중복 호출 라인이 삭제되었습니다)
 
-            elif trait == 'learning_rate':
-                trait_sim = 1.0 - (abs(float(gene1[0]) - float(gene2[0])) / 0.9)
-            
-            total_sim += trait_sim * weight
-        
-        return total_sim / total_weight if total_weight > 0 else 1.0
-    
     def _initialize_traits(self):
         self.size = self._generate_random_trait_value('size'); self.muscle_mass = self._generate_random_trait_value('muscle_mass')
         self.color = self._generate_random_trait_value('color'); self.lifespan_potential = self._generate_random_trait_value('lifespan_potential')
@@ -173,16 +139,29 @@ class Individual:
         total_sim, total_weight = 0.0, 0.0
         for trait, weight in SimulationSettings.GENETIC_SIMILARITY_WEIGHTS.items():
             if not hasattr(self, trait) or not hasattr(other, trait) or self.genotype.get(trait) is None: continue
-            total_weight += weight; gene1, gene2 = self.genotype.get(trait), other.genotype.get(trait); trait_sim = 0.0
+            
+            total_weight += weight
+            gene1, gene2 = self.genotype.get(trait), other.genotype.get(trait)
+            trait_sim = 0.0
+            
             if isinstance(gene1, (list, tuple)):
-                alleles1 = (gene1[0] + gene1[1]) if isinstance(gene1[0], list) else gene1
-                alleles2 = (gene2[0] + gene2[1]) if isinstance(gene2[0], list) else gene2
-                intersection = sum((collections.Counter(alleles1) & collections.Counter(alleles2)).values())
-                union = sum((collections.Counter(alleles1) | collections.Counter(alleles2)).values())
-                if union > 0: trait_sim = intersection / union
+                alleles1_list = (gene1[0] + gene1[1]) if isinstance(gene1[0], list) else gene1
+                alleles2_list = (gene2[0] + gene2[1]) if isinstance(gene2[0], list) else gene2
+                
+                # JIT 함수에 전달하기 위해 NumPy 배열로 변환
+                # 빈 문자열 ''이 들어올 경우를 대비해 if c를 추가하여 안정성 확보
+                alleles1_np = np.array([ord(c[0]) for c in alleles1_list if c], dtype=np.int64)
+                alleles2_np = np.array([ord(c[0]) for c in alleles2_list if c], dtype=np.int64)
+                
+                # 두 배열이 모두 비어있지 않을 때만 JIT 함수를 호출
+                if alleles1_np.size > 0 and alleles2_np.size > 0:
+                    trait_sim = calculate_similarity_jit(alleles1_np, alleles2_np)
+
             elif trait == 'learning_rate':
                 trait_sim = 1.0 - (abs(float(gene1[0]) - float(gene2[0])) / 0.9)
+            
             total_sim += trait_sim * weight
+        
         return total_sim / total_weight if total_weight > 0 else 1.0
     
     def _calculate_mating_compatibility(self, other):
@@ -197,7 +176,6 @@ class Individual:
             self.is_alive = False
             self.env.remove_individual_from_occupancy_map(self)
             self.env.add_food_from_carcass(self.x, self.y, self.carcass_food_value)
-            # self.env.simulation_ref.turn_logs[self.env.current_turn].append(f"ID {self.id} died: {reason}")
     
     def age_and_check_death(self):
         self.age += 1
@@ -242,14 +220,13 @@ class Predator(Individual):
         self.hunting_range = SimulationSettings.PREDATOR_HUNTING_RANGE
         self.base_movement_speed = SimulationSettings.BASE_MOVEMENT_SPEED_PREDATOR
     
-    def hunt(self, prey_population):
+    def hunt(self, prey_population, nearby_ids):
         hunted_prey_id = None
-        occupants = self.env.occupancy_map.get((self.x, self.y), set())
-        for prey_id in list(occupants):
+        for prey_id in nearby_ids:
             prey = prey_population.get(prey_id)
-            if prey and prey.is_alive:
+            if prey and prey.is_alive and (prey.x, prey.y) == (self.x, self.y):
                 prey.die("hunted")
                 self.energy = min(self.max_energy, self.energy + prey.max_energy)
                 hunted_prey_id = prey.id
-                break # Hunt one prey per turn
+                break
         return hunted_prey_id
