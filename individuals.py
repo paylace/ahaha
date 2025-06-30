@@ -34,16 +34,14 @@ class Individual:
                 alleles2_list = (gene2[0] + gene2[1]) if isinstance(gene2[0], list) else gene2
                 
                 # JIT 함수에 전달하기 위해 NumPy 배열로 변환
-                # 문자열 배열은 Numba에서 처리하기 까다로우므로, 숫자로 변환 (예: ord)
-                alleles1_np = np.array([ord(c[0]) for c in alleles1_list], dtype=np.int64)
-                alleles2_np = np.array([ord(c[0]) for c in alleles2_list], dtype=np.int64)
+                # 빈 문자열 ''이 들어올 경우를 대비해 if c를 추가하여 안정성 확보
+                alleles1_np = np.array([ord(c[0]) for c in alleles1_list if c], dtype=np.int64)
+                alleles2_np = np.array([ord(c[0]) for c in alleles2_list if c], dtype=np.int64)
                 
-                
+                # 두 배열이 모두 비어있지 않을 때만 JIT 함수를 호출
                 if alleles1_np.size > 0 and alleles2_np.size > 0:
                     trait_sim = calculate_similarity_jit(alleles1_np, alleles2_np)
-                
-                # JIT 함수 호출
-                trait_sim = calculate_similarity_jit(alleles1_np, alleles2_np)
+                # (중복 호출 라인이 삭제되었습니다)
 
             elif trait == 'learning_rate':
                 trait_sim = 1.0 - (abs(float(gene1[0]) - float(gene2[0])) / 0.9)
