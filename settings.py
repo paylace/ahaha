@@ -2,6 +2,9 @@
 
 class SimulationSettings:
     """시뮬레이션 전체에 사용되는 상수와 설정을 관리하는 클래스입니다."""
+
+    SPATIAL_HASH_GRID_SIZE = 5 # 5x5 크기의 타일을 하나의 큰 격자로 묶음
+    
     # 환경 설정
     WIDTH = 40
     HEIGHT = 40
