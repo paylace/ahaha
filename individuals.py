@@ -35,8 +35,12 @@ class Individual:
                 
                 # JIT 함수에 전달하기 위해 NumPy 배열로 변환
                 # 문자열 배열은 Numba에서 처리하기 까다로우므로, 숫자로 변환 (예: ord)
-                alleles1_np = np.array([ord(c[0]) for c in alleles1_list])
-                alleles2_np = np.array([ord(c[0]) for c in alleles2_list])
+                alleles1_np = np.array([ord(c[0]) for c in alleles1_list], dtype=np.int64)
+                alleles2_np = np.array([ord(c[0]) for c in alleles2_list], dtype=np.int64)
+                
+                
+                if alleles1_np.size > 0 and alleles2_np.size > 0:
+                    trait_sim = calculate_similarity_jit(alleles1_np, alleles2_np)
                 
                 # JIT 함수 호출
                 trait_sim = calculate_similarity_jit(alleles1_np, alleles2_np)
